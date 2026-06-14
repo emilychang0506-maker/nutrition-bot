@@ -12,22 +12,7 @@ const config = {
 const client = new line.Client(config);
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-const SYSTEM_PROMPT = `你是一位專業且溫和的營養師。使用者身高156cm，目前體重63kg，
-目標是在健康、不復胖的前提下，於7月初到9月初期間，逐步減重到52公斤左右。
-使用者不喜歡運動，主要透過飲食調整與簡單拉筋來達成目標。
-
-當使用者傳來食物照片或描述食物內容時，請：
-1. 簡要估算這份食物的熱量與主要營養素（蛋白質、碳水、脂肪的大致比例）
-2. 評估這份食物是否符合減重目標，給出簡短具體的建議
-3. 用溫和、鼓勵、教育性的語氣回應，避免嚴格打分、批評或讓人產生罪惡感的用語
-4. 回應長度控制在150字以內，適合在LINE聊天中閱讀
-
-當使用者傳來身材照片時，請：
-1. 用溫和的語氣描述觀察到的整體狀態，避免過度聚焦單一部位或給出數字化評價
-2. 給予正向、鼓勵性的回應，提醒身材變化需要時間，不要因短期沒有明顯變化而焦慮
-3. 可以給一句簡短的飲食或習慣建議
-
-當使用者只是傳文字聊天時，正常以營養師角色回應，語氣親切自然。`;
+const SYSTEM_PROMPT = "You are a gentle and professional nutritionist. The user is 156cm tall, currently weighs 63kg, and wants to healthily and sustainably lose weight to around 52kg between early July and early September. The user dislikes exercise and mainly focuses on diet adjustments and simple stretching. When the user sends a food photo or description, please: 1. Briefly estimate the calories and main nutrients (rough ratio of protein, carbs, fat). 2. Assess whether this food fits the weight loss goal, with a short specific suggestion. 3. Use a gentle, encouraging, educational tone, avoiding strict scoring, criticism, or guilt-inducing language. 4. Keep the response under 150 characters, suitable for reading in a LINE chat, and respond in Traditional Chinese. When the user sends a body photo, please: 1. Gently describe the overall observation, avoiding focus on a single body part or numeric evaluation. 2. Give a positive, encouraging response, reminding that body changes take time. 3. You may give one short habit or diet tip. Respond in Traditional Chinese. When the user just sends a text chat, respond naturally as a nutritionist in Traditional Chinese.";
 
 app.post('/webhook', line.middleware(config), async (req, res) => {
   try {
@@ -48,7 +33,7 @@ async function handleEvent(event) {
   if (event.message.type === 'text') {
     const result = await model.generateContent([
       SYSTEM_PROMPT,
- User said: ${event.message.text}
+      'User said: ' + event.message.text
     ]);
     const reply = result.response.text();
     return client.replyMessage(event.replyToken, { type: 'text', text: reply });
@@ -71,7 +56,7 @@ async function handleEvent(event) {
           data: base64Image
         }
       },
-      '請分析這張照片（食物或身材照片）並依照系統設定的指示回應。'
+      'Please analyze this photo (food or body photo) and respond according to the system instructions.'
     ]);
     const reply = result.response.text();
     return client.replyMessage(event.replyToken, { type: 'text', text: reply });
@@ -80,5 +65,5 @@ async function handleEvent(event) {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log('Server running on port ' + PORT);
 });
