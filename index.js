@@ -41,6 +41,27 @@ function getEstimateText() {
   return '\n以每週至少減 0.3 kg 估算，大約還需要 ' + weeks + ' 週可達成目標';
 }
 
+function getProgressText() {
+  let reply = '目前體重：' + (currentWeight !== null ? currentWeight + ' kg' : '尚未記錄') + '\n';
+  reply += '目標體重：' + (targetWeight !== null ? targetWeight + ' kg' : '尚未設定');
+  if (currentWeight !== null && targetWeight !== null) {
+    const diff = (currentWeight - targetWeight).toFixed(1);
+    reply += '\n距離目標還有 ' + diff + ' kg';
+    reply += getEstimateText();
+  }
+  return reply;
+}
+
+function getMealsStatusText() {
+  let reply = '早餐：' + (meals.breakfast || '還沒輸入') + '\n';
+  reply += '午餐：' + (meals.lunch || '還沒輸入') + '\n';
+  reply += '晚餐：' + (meals.dinner || '還沒輸入');
+  if (meals.snack) {
+    reply += '\n點心：' + meals.snack;
+  }
+  return reply;
+}
+
 async function handleEvent(event) {
   if (event.type !== 'message') return;
 
@@ -86,12 +107,18 @@ async function handleEvent(event) {
     const content = mealMatch[2].trim();
     meals[mealKey] = content;
 
-    const reply = '你好！今天' + mealMatch[1] + '吃了' + content;
+    const reply = '你好！\n' + getMealsStatusText();
+    return client.replyMessage(event.replyToken, { type: 'text', text: reply });
+  }
+
+  // Progress query: contains "目標" and "多遠" or similar keywords
+  if (text.includes('多遠') || text.includes('還要多久') || (text.includes('目標') && text.includes('距離'))) {
+    const reply = getProgressText();
     return client.replyMessage(event.replyToken, { type: 'text', text: reply });
   }
 
   // Anything else
-  const reply = '祝你早日達成目標！記得多喝水！';
+  const reply = '祝你早日達成目標！記得多喝水！\n' + getProgressText();
   return client.replyMessage(event.replyToken, { type: 'text', text: reply });
 }
 
@@ -137,16 +164,10 @@ cron.schedule('0 19 * * *', () => {
 // 00:00 - daily summary, then reset for next day
 cron.schedule('0 0 * * *', () => {
   let summary = '今天的飲食紀錄整理：\n';
-  summary += '早餐：' + (meals.breakfast || '未記錄') + '\n';
-  summary += '午餐：' + (meals.lunch || '未記錄') + '\n';
-  summary += '晚餐：' + (meals.dinner || '未記錄') + '\n';
-  summary += '點心：' + (meals.snack || '無') + '\n\n';
+  summary += getMealsStatusText() + '\n\n';
 
   if (currentWeight !== null && targetWeight !== null) {
-    const diff = (currentWeight - targetWeight).toFixed(1);
-    summary += '目前體重：' + currentWeight + ' kg\n';
-    summary += '距離目標還有 ' + diff + ' kg';
-    summary += getEstimateText() + '\n\n';
+    summary += getProgressText() + '\n\n';
   }
 
   summary += '該睡覺了！喝點溫水幫助入睡，記得輸入今天的體重數據哦';
