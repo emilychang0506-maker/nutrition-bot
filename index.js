@@ -11,15 +11,10 @@ const config = {
 
 const client = new line.Client(config);
 
-// Store user data in memory (resets if server restarts)
 let userId = null;
 let logs = [];
-let userProfile = {
-  height: null,
-  weight: null,
-  targetWeight: null,
-  targetDate: null
-};
+let currentWeight = null;
+let targetWeight = null;
 
 app.post('/webhook', line.middleware(config), async (req, res) => {
   try {
@@ -35,33 +30,63 @@ app.post('/webhook', line.middleware(config), async (req, res) => {
 async function handleEvent(event) {
   if (event.type !== 'message') return;
 
-  // Save userId so we can send proactive messages later
   if (event.source && event.source.userId) {
     userId = event.source.userId;
-    console.log('USER ID FOUND: ' + userId);
   }
 
   if (event.message.type === 'text') {
-    const text = event.message.text;
+    const text = event.message.text.trim();
 
-    // Save the message as a log entry with timestamp
     logs.push({
       time: new Date().toISOString(),
       text: text
     });
 
-    const reply = 'Got it! Recorded: ' + text;
+    // Check if message sets a target weight, format: "目標52" or "target52"
+    const targetMatch = text.match(/^目標\s*(\d+(\.\d+)?)$/);
+    if (targetMatch) {
+      targetWeight = parseFloat(targetMatch[1]);
+      const reply = '好的！目標體重已設定為 ' + targetWeight + ' kg';
+      return client.replyMessage(event.replyToken, { type: 'text', text: reply });
+    }
+
+    // Check if message is just a number, treat as current weight
+    const weightMatch = text.match(/^(\d+(\.\d+)?)$/);
+    if (weightMatch) {
+      currentWeight = parseFloat(weightMatch[1]);
+      let reply = '已記錄今日體重：' + currentWeight + ' kg';
+      if (targetWeight) {
+        const diff = (currentWeight - targetWeight).toFixed(1);
+        reply += '\n距離目標還有 ' + diff + ' kg';
+      }
+      return client.replyMessage(event.replyToken, { type: 'text', text: reply });
+    }
+
+    // Otherwise treat as food log, reply with progress summary
+    let reply = '你好！\n';
+    if (currentWeight) {
+      reply += '目前體重：' + currentWeight + ' kg\n';
+    } else {
+      reply += '目前體重：尚未記錄\n';
+    }
+    if (targetWeight) {
+      reply += '目標體重：' + targetWeight + ' kg\n';
+    } else {
+      reply += '目標體重：尚未設定\n';
+    }
+    if (currentWeight && targetWeight) {
+      const diff = (currentWeight - targetWeight).toFixed(1);
+      reply += '距離目標還有 ' + diff + ' kg\n';
+    }
+    reply += '\n飲食紀錄已收到，請在下個時間輸入飲食紀錄';
+
     return client.replyMessage(event.replyToken, { type: 'text', text: reply });
   }
 }
 
-// View all logs (open this URL in browser to check records)
 app.get('/logs', (req, res) => {
-  res.json({ userId: userId, logs: logs });
+  res.json({ userId: userId, currentWeight: currentWeight, targetWeight: targetWeight, logs: logs });
 });
-
-// ===== Scheduled reminders =====
-// Times are in Asia/Taipei timezone
 
 function sendMessage(text) {
   if (!userId) {
@@ -71,22 +96,18 @@ function sendMessage(text) {
   client.pushMessage(userId, { type: 'text', text: text });
 }
 
-// 10:00 AM - breakfast check-in
 cron.schedule('0 10 * * *', () => {
   sendMessage('早安！早餐吃了什麼呢？告訴我一下吧');
 }, { timezone: 'Asia/Taipei' });
 
-// 12:30 PM - lunch check-in
 cron.schedule('30 12 * * *', () => {
   sendMessage('午餐時間！吃了什麼呢？');
 }, { timezone: 'Asia/Taipei' });
 
-// 7:00 PM - dinner check-in
 cron.schedule('0 19 * * *', () => {
   sendMessage('晚餐吃了什麼呢？跟我說說吧');
 }, { timezone: 'Asia/Taipei' });
 
-// 12:00 AM - night reminder
 cron.schedule('0 0 * * *', () => {
   sendMessage('該睡覺了！喝點溫水幫助入睡，記得輸入今天的體重數據哦');
 }, { timezone: 'Asia/Taipei' });
