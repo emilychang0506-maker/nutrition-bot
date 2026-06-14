@@ -33,12 +33,29 @@ app.post('/webhook', line.middleware(config), async (req, res) => {
   }
 });
 
+function formatWeeks(weeks) {
+  const months = Math.floor(weeks / 4);
+  const remWeeks = weeks % 4;
+  if (months === 0) {
+    return weeks + ' 週';
+  }
+  if (remWeeks === 0) {
+    return weeks + ' 週（約 ' + months + ' 個月）';
+  }
+  return weeks + ' 週（約 ' + months + ' 個月 ' + remWeeks + ' 週）';
+}
+
 function getEstimateText() {
   if (currentWeight === null || targetWeight === null) return '';
   const diff = currentWeight - targetWeight;
   if (diff <= 0) return '\n你已經達到目標體重了！太棒了';
-  const weeks = Math.ceil(diff / 0.3);
-  return '\n以每週至少減 0.3 kg 估算，大約還需要 ' + weeks + ' 週可達成目標';
+
+  const weeksSlow = Math.ceil(diff / 0.3);
+  const weeksFast = Math.ceil(diff / 0.5);
+
+  let text = '\n以每週減 0.3 kg 估算，大約還需要 ' + formatWeeks(weeksSlow);
+  text += '\n若加快到每週減 0.5 kg，大約還需要 ' + formatWeeks(weeksFast);
+  return text;
 }
 
 function getProgressText() {
@@ -73,10 +90,10 @@ async function handleEvent(event) {
 
   const text = event.message.text.trim();
 
-  // Target weight: "目標52"
-  const targetMatch = text.match(/^目標\s*(\d+(\.\d+)?)$/);
+  // Target weight: "目標52", "目標體重：52", "目標體重52" etc.
+  const targetMatch = text.match(/^目標(體重)?[：:]?\s*(\d+(\.\d+)?)$/);
   if (targetMatch) {
-    targetWeight = parseFloat(targetMatch[1]);
+    targetWeight = parseFloat(targetMatch[2]);
     const reply = '好的！目標體重已設定為 ' + targetWeight + ' kg';
     return client.replyMessage(event.replyToken, { type: 'text', text: reply });
   }
@@ -111,8 +128,8 @@ async function handleEvent(event) {
     return client.replyMessage(event.replyToken, { type: 'text', text: reply });
   }
 
-  // Progress query: contains "目標" and "多遠" or similar keywords
-  if (text.includes('多遠') || text.includes('還要多久') || (text.includes('目標') && text.includes('距離'))) {
+  // Progress query
+  if (text.includes('多遠') || text.includes('還要多久') || text.includes('多久') || (text.includes('目標') && text.includes('距離'))) {
     const reply = getProgressText();
     return client.replyMessage(event.replyToken, { type: 'text', text: reply });
   }
@@ -134,7 +151,6 @@ function sendMessage(text) {
   client.pushMessage(userId, { type: 'text', text: text });
 }
 
-// 10:00 - breakfast
 cron.schedule('0 10 * * *', () => {
   if (meals.breakfast) {
     sendMessage('你好！今天早餐吃了' + meals.breakfast);
@@ -143,7 +159,6 @@ cron.schedule('0 10 * * *', () => {
   }
 }, { timezone: 'Asia/Taipei' });
 
-// 12:30 - lunch
 cron.schedule('30 12 * * *', () => {
   if (meals.lunch) {
     sendMessage('你好！今天午餐吃了' + meals.lunch);
@@ -152,7 +167,6 @@ cron.schedule('30 12 * * *', () => {
   }
 }, { timezone: 'Asia/Taipei' });
 
-// 19:00 - dinner
 cron.schedule('0 19 * * *', () => {
   if (meals.dinner) {
     sendMessage('你好！今天晚餐吃了' + meals.dinner);
@@ -161,7 +175,6 @@ cron.schedule('0 19 * * *', () => {
   }
 }, { timezone: 'Asia/Taipei' });
 
-// 00:00 - daily summary, then reset for next day
 cron.schedule('0 0 * * *', () => {
   let summary = '今天的飲食紀錄整理：\n';
   summary += getMealsStatusText() + '\n\n';
