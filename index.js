@@ -90,7 +90,7 @@ async function handleEvent(event) {
 
   const text = event.message.text.trim();
 
-  // Target weight: "目標52", "目標體重：52", "目標體重52" etc.
+  // Target weight: "目標52", "目標體重52", "目標體重：52"
   const targetMatch = text.match(/^目標(體重)?[：:]?\s*(\d+(\.\d+)?)$/);
   if (targetMatch) {
     targetWeight = parseFloat(targetMatch[2]);
@@ -98,10 +98,10 @@ async function handleEvent(event) {
     return client.replyMessage(event.replyToken, { type: 'text', text: reply });
   }
 
-  // Current weight: plain number
-  const weightMatch = text.match(/^(\d+(\.\d+)?)$/);
+  // Current weight: "目前62", "目前體重62", "目前體重：62", or plain number
+  const weightMatch = text.match(/^(目前體重|目前)?[：:]?\s*(\d+(\.\d+)?)$/);
   if (weightMatch) {
-    currentWeight = parseFloat(weightMatch[1]);
+    currentWeight = parseFloat(weightMatch[2]);
     let reply = '已記錄今日體重：' + currentWeight + ' kg';
     if (targetWeight !== null) {
       const diff = (currentWeight - targetWeight).toFixed(1);
