@@ -1,6 +1,6 @@
 const express = require('express');
 const line = require('@line/bot-sdk');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const cron = require('node-cron');
 
 const app = express();
 
@@ -10,9 +10,16 @@ const config = {
 };
 
 const client = new line.Client(config);
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-const SYSTEM_PROMPT = "You are a gentle and professional nutritionist. The user is 156cm tall, currently weighs 63kg, and wants to healthily and sustainably lose weight to around 52kg between early July and early September. The user dislikes exercise and mainly focuses on diet adjustments and simple stretching. When the user sends a food photo or description, please: 1. Briefly estimate the calories and main nutrients (rough ratio of protein, carbs, fat). 2. Assess whether this food fits the weight loss goal, with a short specific suggestion. 3. Use a gentle, encouraging, educational tone, avoiding strict scoring, criticism, or guilt-inducing language. 4. Keep the response under 150 characters, suitable for reading in a LINE chat, and respond in Traditional Chinese. When the user sends a body photo, please: 1. Gently describe the overall observation, avoiding focus on a single body part or numeric evaluation. 2. Give a positive, encouraging response, reminding that body changes take time. 3. You may give one short habit or diet tip. Respond in Traditional Chinese. When the user just sends a text chat, respond naturally as a nutritionist in Traditional Chinese.";
+// Store user data in memory (resets if server restarts)
+let userId = null;
+let logs = [];
+let userProfile = {
+  height: null,
+  weight: null,
+  targetWeight: null,
+  targetDate: null
+};
 
 app.post('/webhook', line.middleware(config), async (req, res) => {
   try {
@@ -28,40 +35,61 @@ app.post('/webhook', line.middleware(config), async (req, res) => {
 async function handleEvent(event) {
   if (event.type !== 'message') return;
 
-const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-
-  if (event.message.type === 'text') {
-    const result = await model.generateContent([
-      SYSTEM_PROMPT,
-      'User said: ' + event.message.text
-    ]);
-    const reply = result.response.text();
-    return client.replyMessage(event.replyToken, { type: 'text', text: reply });
+  // Save userId so we can send proactive messages later
+  if (event.source && event.source.userId) {
+    userId = event.source.userId;
+    console.log('USER ID FOUND: ' + userId);
   }
 
-  if (event.message.type === 'image') {
-    const stream = await client.getMessageContent(event.message.id);
-    const chunks = [];
-    for await (const chunk of stream) {
-      chunks.push(chunk);
-    }
-    const buffer = Buffer.concat(chunks);
-    const base64Image = buffer.toString('base64');
+  if (event.message.type === 'text') {
+    const text = event.message.text;
 
-    const result = await model.generateContent([
-      SYSTEM_PROMPT,
-      {
-        inlineData: {
-          mimeType: 'image/jpeg',
-          data: base64Image
-        }
-      },
-      'Please analyze this photo (food or body photo) and respond according to the system instructions.'
-    ]);
-    const reply = result.response.text();
+    // Save the message as a log entry with timestamp
+    logs.push({
+      time: new Date().toISOString(),
+      text: text
+    });
+
+    const reply = 'Got it! Recorded: ' + text;
     return client.replyMessage(event.replyToken, { type: 'text', text: reply });
   }
 }
+
+// View all logs (open this URL in browser to check records)
+app.get('/logs', (req, res) => {
+  res.json({ userId: userId, logs: logs });
+});
+
+// ===== Scheduled reminders =====
+// Times are in Asia/Taipei timezone
+
+function sendMessage(text) {
+  if (!userId) {
+    console.log('No userId saved yet, cannot send message');
+    return;
+  }
+  client.pushMessage(userId, { type: 'text', text: text });
+}
+
+// 10:00 AM - breakfast check-in
+cron.schedule('0 10 * * *', () => {
+  sendMessage('早安！早餐吃了什麼呢？告訴我一下吧');
+}, { timezone: 'Asia/Taipei' });
+
+// 12:30 PM - lunch check-in
+cron.schedule('30 12 * * *', () => {
+  sendMessage('午餐時間！吃了什麼呢？');
+}, { timezone: 'Asia/Taipei' });
+
+// 7:00 PM - dinner check-in
+cron.schedule('0 19 * * *', () => {
+  sendMessage('晚餐吃了什麼呢？跟我說說吧');
+}, { timezone: 'Asia/Taipei' });
+
+// 12:00 AM - night reminder
+cron.schedule('0 0 * * *', () => {
+  sendMessage('該睡覺了！喝點溫水幫助入睡，記得輸入今天的體重數據哦');
+}, { timezone: 'Asia/Taipei' });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
