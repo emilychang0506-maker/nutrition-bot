@@ -48,7 +48,7 @@ async function handleEvent(event) {
   if (event.message.type === 'text') {
     const result = await model.generateContent([
       SYSTEM_PROMPT,
-      使用者說：${event.message.text}
+ User said: ${event.message.text}
     ]);
     const reply = result.response.text();
     return client.replyMessage(event.replyToken, { type: 'text', text: reply });
